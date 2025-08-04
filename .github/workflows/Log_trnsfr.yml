@@ -31,7 +31,6 @@ jobs:
         SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
       run: |
         set -e
-
         echo "🔐 Setting up SSH..."
         mkdir -p ~/.ssh
         chmod 700 ~/.ssh
@@ -49,7 +48,7 @@ jobs:
 
         echo "🔍 Testing SSH connectivity to ${{ inputs.vm_ip }}..."
         ssh -q -o BatchMode=yes -o ConnectTimeout=10 \
-          kk_lab_user_185639@${{ inputs.vm_ip }} "echo ✅ SSH connection successful" || {
+          kk_lab_user_794536@${{ inputs.vm_ip }} "echo ✅ SSH connection successful" || {
           echo "❌ SSH connection failed. Check if the VM is online and SSH port is open."
           exit 1
         }
@@ -57,9 +56,8 @@ jobs:
     - name: 📡 Fetch log from VM
       run: |
         echo "📡 Fetching log file from: ${{ inputs.log_path }}"
-        ssh -o StrictHostKeyChecking=yes kk_lab_user_185639@${{ inputs.vm_ip }} \
+        ssh -o StrictHostKeyChecking=yes kk_lab_user_794536@${{ inputs.vm_ip }} \
           "cat '${{ inputs.log_path }}'" > wfc.log
-
         echo "✅ First few lines of fetched log:"
         head -n 10 wfc.log || echo "(file empty)"
 
