@@ -1,0 +1,78 @@
+name: Upload wfc.log from VM
+
+on:
+  workflow_dispatch:
+    inputs:
+      vm_ip:
+        description: 'Public IP address of the VM'
+        required: true
+        type: string
+      log_path:
+        description: 'Full path to the log file on the VM'
+        required: true
+        type: string
+
+jobs:
+  fetch-log-and-upload:
+    name: Fetch log from VM and upload
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: 📥 Checkout repository
+      uses: actions/checkout@v3
+
+    - name: 🧰 Install required tools
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y openssh-client netcat-openbsd
+
+    - name: 🔍 Check SSH port availability
+      run: |
+        echo "🔍 Checking if port 22 is open on ${{ inputs.vm_ip }}..."
+        nc -z -w 5 ${{ inputs.vm_ip }} 22 || {
+          echo "❌ Port 22 is not reachable. Ensure the VM is running and accessible."
+          exit 1
+        }
+
+    - name: 🔑 Set up SSH and fetch log
+      env:
+        SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      run: |
+        set -e
+
+        echo "🔐 Setting up SSH..."
+        mkdir -p ~/.ssh
+        chmod 700 ~/.ssh
+        printf "%s\n" "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+
+        echo "🚀 Starting SSH agent"
+        eval "$(ssh-agent -s)"
+        ssh-add ~/.ssh/id_rsa
+
+        echo "🧾 Adding VM to known_hosts..."
+        ssh-keyscan -T 10 -H ${{ inputs.vm_ip }} >> ~/.ssh/known_hosts 2> scan_error.log || {
+          echo "⚠️ ssh-keyscan failed:"
+          cat scan_error.log
+          exit 1
+        }
+
+        echo "📡 Connecting to VM and fetching log file..."
+        ssh -o StrictHostKeyChecking=yes kk_lab_user_185639@${{ inputs.vm_ip }} \
+          "cat '${{ inputs.log_path }}'" > wfc.log
+
+        echo "✅ First few lines of fetched log:"
+        head -n 10 wfc.log || echo "(file empty)"
+
+    - name: ✅ Validate log file
+      run: |
+        if [[ ! -s wfc.log ]]; then
+          echo "❌ Log file is missing or empty!"
+          exit 1
+        fi
+
+    - name: 📤 Upload wfc.log as artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: wfc-log
+        path: wfc.log
