@@ -16,6 +16,7 @@ jobs:
   fetch-log-and-upload:
     name: Fetch log from VM and upload
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
     - name: 📥 Checkout repository
@@ -71,5 +72,5 @@ jobs:
     - name: 📤 Upload wfc.log as artifact
       uses: actions/upload-artifact@v4
       with:
-        name: wfc-log
+        name: wfc-log-${{ github.run_id }}
         path: wfc.log
