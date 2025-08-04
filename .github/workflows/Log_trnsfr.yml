@@ -4,11 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       vm_ip:
-        description: 'Public IP address of the VM'
+        description: 'Public IP address of the VM (e.g. 34.122.100.23)'
         required: true
         type: string
       log_path:
-        description: 'Full path to the log file on the VM'
+        description: 'Full path to the log file on the VM (e.g. /home/user/logs/wfc.log)'
         required: true
         type: string
 
@@ -21,20 +21,12 @@ jobs:
     - name: 📥 Checkout repository
       uses: actions/checkout@v3
 
-    - name: 🧰 Install required tools
+    - name: 🧰 Install SSH client
       run: |
         sudo apt-get update
-        sudo apt-get install -y openssh-client netcat-openbsd
+        sudo apt-get install -y openssh-client
 
-    - name: 🔍 Check SSH port availability
-      run: |
-        echo "🔍 Checking if port 22 is open on ${{ inputs.vm_ip }}..."
-        nc -z -w 5 ${{ inputs.vm_ip }} 22 || {
-          echo "❌ Port 22 is not reachable. Ensure the VM is running and accessible."
-          exit 1
-        }
-
-    - name: 🔑 Set up SSH and fetch log
+    - name: 🔑 Prepare SSH and test connection
       env:
         SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
       run: |
@@ -51,23 +43,30 @@ jobs:
         ssh-add ~/.ssh/id_rsa
 
         echo "🧾 Adding VM to known_hosts..."
-        ssh-keyscan -T 10 -H ${{ inputs.vm_ip }} >> ~/.ssh/known_hosts 2> scan_error.log || {
-          echo "⚠️ ssh-keyscan failed:"
-          cat scan_error.log
+        ssh-keyscan -T 10 -H ${{ inputs.vm_ip }} >> ~/.ssh/known_hosts || {
+          echo "⚠️ Warning: ssh-keyscan failed. Continuing anyway..."
+        }
+
+        echo "🔍 Testing SSH connectivity to ${{ inputs.vm_ip }}..."
+        ssh -q -o BatchMode=yes -o ConnectTimeout=10 \
+          kk_lab_user_185639@${{ inputs.vm_ip }} "echo ✅ SSH connection successful" || {
+          echo "❌ SSH connection failed. Check if the VM is online and SSH port is open."
           exit 1
         }
 
-        echo "📡 Connecting to VM and fetching log file..."
+    - name: 📡 Fetch log from VM
+      run: |
+        echo "📡 Fetching log file from: ${{ inputs.log_path }}"
         ssh -o StrictHostKeyChecking=yes kk_lab_user_185639@${{ inputs.vm_ip }} \
           "cat '${{ inputs.log_path }}'" > wfc.log
 
         echo "✅ First few lines of fetched log:"
         head -n 10 wfc.log || echo "(file empty)"
 
-    - name: ✅ Validate log file
+    - name: ✅ Verify that log file exists and is not empty
       run: |
         if [[ ! -s wfc.log ]]; then
-          echo "❌ Log file is missing or empty!"
+          echo "❌ Log file is empty or missing!"
           exit 1
         fi
 
